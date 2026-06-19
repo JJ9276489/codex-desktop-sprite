@@ -1,7 +1,7 @@
 import Foundation
 
 enum AppConfig {
-    static let appVersion = "0.7.0"
+    static let appVersion = "0.7.1"
     static var defaultWorkspacePath: String {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("CODEX - DIGITAL ASSISTANT TASKS")

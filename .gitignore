@@ -1,4 +1,5 @@
 .build/
+build/
 .swiftpm/
 dist/
 DerivedData/
@@ -21,6 +22,9 @@ Assets/ChibiAssistant/generated/sitting-orientations/*
 !Assets/ChibiAssistant/generated/sitting-orientations/sitting-orientations-sheet.png
 !Assets/ChibiAssistant/generated/sitting-orientations/sitting-orientations-sheet.json
 !Assets/ChibiAssistant/generated/sitting-orientations/sitting-orientations-sheet-preview.png
+!Assets/ChibiAssistant/generated/codex-pet/
+Assets/ChibiAssistant/generated/codex-pet/*
+!Assets/ChibiAssistant/generated/codex-pet/codex-lumi-spritesheet.png
 !Assets/ChibiAssistant/generated/expressions/
 Assets/ChibiAssistant/generated/expressions/*
 !Assets/ChibiAssistant/generated/expressions/expressions-sheet.png

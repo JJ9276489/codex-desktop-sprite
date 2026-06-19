@@ -12,6 +12,7 @@ This repository intentionally does **not** maintain the old standalone Lumi agen
 
 - Shows a draggable desktop-level sprite that stays on the current desktop.
 - Uses Lumi's better standing and sitting sprite sheets for the visible character.
+- Can install Lumi as Codex Desktop's built-in custom pet so the supported Codex pet overlay uses Lumi art.
 - Tracks cursor gaze continuously while standing or sitting.
 - Sits after idle time and stands for prompt/working states.
 - Shows the small speech/thought bubbles from the original Codex sprite path.
@@ -66,6 +67,8 @@ CODEX_SPRITE_CODEX_PATH="/Applications/Codex.app/Contents/Resources/codex" \
 | `./script/build_and_run.sh` | Build, stage `dist/CodexSprite.app`, and launch |
 | `./script/build_and_run.sh --build` | Build and stage only |
 | `./script/build_and_run.sh --verify` | Build, launch, and assert the process is running |
+| `./script/install_codex_lumi_pet.sh` | Build, install, and select Lumi as Codex Desktop's built-in custom pet |
+| `./script/install_codex_lumi_pet.sh --build-only` | Build and validate the Codex custom-pet spritesheet only |
 | `./script/test.sh` | Run the focused test harness |
 | `./script/summon.sh` | Relaunch the staged app without rebuilding |
 
@@ -87,8 +90,19 @@ Runtime sprite assets are intentionally limited to:
 
 - `Assets/ChibiAssistant/generated/standing-orientations/standing-orientations-sheet.png`
 - `Assets/ChibiAssistant/generated/sitting-orientations/sitting-orientations-sheet.png`
+- `Assets/ChibiAssistant/generated/codex-pet/codex-lumi-spritesheet.png`
 
 See [docs/ASSETS.md](docs/ASSETS.md) for the asset boundary.
+
+## Codex Desktop Built-In Pet
+
+Codex Desktop supports custom pets from `~/.codex/pets`. To replace the default Codex pet with Lumi without patching the signed Codex app bundle:
+
+```bash
+./script/install_codex_lumi_pet.sh
+```
+
+The installer generates Codex's required 1536 x 1872 spritesheet from the maintained Lumi stand/sit sheets, writes `~/.codex/pets/lumi`, and selects `custom:lumi` in Codex's persisted state. If Codex is already running, relaunch Codex or refresh the Pets settings for the change to appear in the overlay.
 
 ## Known Limits
 

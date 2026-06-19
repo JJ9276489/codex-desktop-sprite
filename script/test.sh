@@ -12,4 +12,5 @@ xcrun swiftc -swift-version 5 \
   Tests/TestRunner/main.swift \
   -o .build/codex-sprite-tests
 
-exec .build/codex-sprite-tests
+.build/codex-sprite-tests
+./script/install_codex_lumi_pet.sh --build-only >/dev/null

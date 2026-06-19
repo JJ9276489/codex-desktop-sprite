@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.1 — 2026-06-19
+
+### Added
+- Added a reproducible Codex Desktop custom-pet installer that converts Lumi's maintained standing and sitting sheets into Codex's 1536 x 1872 pet spritesheet format.
+- Added the generated Lumi Codex pet sheet and documented the `~/.codex/pets/lumi` install path.
+
+### Changed
+- Extended the focused test harness to validate Codex custom-pet sheet generation.
+
 ## 0.7.0 — 2026-06-19
 
 ### Changed

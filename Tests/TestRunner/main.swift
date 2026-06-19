@@ -39,7 +39,7 @@ func validateOrientationManifest(_ path: String, name: String) {
     expect(roles.contains("gaze_right"), "\(name): includes right gaze")
 }
 
-expect(AppConfig.appVersion == "0.7.0", "app version is 0.7.0")
+expect(AppConfig.appVersion == "0.7.1", "app version is 0.7.1")
 expect(AppConfig.bundleIdentifier == "com.github.jj9276489.codexdesktopsprite", "bundle identifier remains stable")
 
 let activeStatus: [String: Any] = [
