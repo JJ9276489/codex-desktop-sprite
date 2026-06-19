@@ -2,9 +2,10 @@
 set -euo pipefail
 
 MODE="${1:-run}"
-APP_NAME="Lumi"
-BUNDLE_ID="com.github.jj9276489.lumi"
+APP_NAME="CodexSprite"
+BUNDLE_ID="com.github.jj9276489.codexdesktopsprite"
 MIN_SYSTEM_VERSION="14.0"
+APP_VERSION="0.7.0"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
@@ -18,7 +19,6 @@ INFO_PLIST="$APP_CONTENTS/Info.plist"
 cd "$ROOT_DIR"
 
 pkill -x "$APP_NAME" >/dev/null 2>&1 || true
-pkill -x "CodexSprite" >/dev/null 2>&1 || true; pkill -x "Sprite" >/dev/null 2>&1 || true
 
 mkdir -p "$ROOT_DIR/.build"
 SWIFTPM_LOG="$ROOT_DIR/.build/swiftpm-build.log"
@@ -34,7 +34,7 @@ else
     -parse-as-library \
     -target arm64-apple-macosx14.0 \
     -framework AppKit \
-    "$ROOT_DIR"/Sources/Lumi/*.swift \
+    "$ROOT_DIR"/Sources/CodexSprite/*.swift \
     -o "$FALLBACK_DIR/$APP_NAME"
   BUILD_BINARY="$FALLBACK_DIR/$APP_NAME"
 fi
@@ -55,14 +55,8 @@ copy_asset() {
   fi
 }
 
-copy_asset "Assets/ChibiAssistant/sprite-sheet.png"
-copy_asset "Assets/ChibiAssistant/generated/supplemental-sheet.png"
-copy_asset "Assets/ChibiAssistant/generated/extra-sheet.png"
 copy_asset "Assets/ChibiAssistant/generated/standing-orientations/standing-orientations-sheet.png"
 copy_asset "Assets/ChibiAssistant/generated/sitting-orientations/sitting-orientations-sheet.png"
-copy_asset "Assets/ChibiAssistant/generated/sleep-wake/sleep-wake-sheet.png"
-copy_asset "Assets/ChibiAssistant/generated/action-sprites/action-sprites-sheet.png"
-copy_asset "Assets/ChibiAssistant/generated/expressions/expressions-sheet.png"
 
 cat >"$INFO_PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -75,12 +69,12 @@ cat >"$INFO_PLIST" <<PLIST
   <string>$BUNDLE_ID</string>
   <key>CFBundleName</key>
   <string>$APP_NAME</string>
+  <key>CFBundleShortVersionString</key>
+  <string>$APP_VERSION</string>
+  <key>CFBundleVersion</key>
+  <string>$APP_VERSION</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
-  <key>CFBundleShortVersionString</key>
-  <string>0.6.0</string>
-  <key>CFBundleVersion</key>
-  <string>6</string>
   <key>LSMinimumSystemVersion</key>
   <string>$MIN_SYSTEM_VERSION</string>
   <key>LSUIElement</key>
@@ -91,16 +85,17 @@ cat >"$INFO_PLIST" <<PLIST
 </plist>
 PLIST
 
+codesign --force --deep --sign - "$APP_BUNDLE"
+
 open_app() {
   /usr/bin/open -n "$APP_BUNDLE"
 }
 
 case "$MODE" in
+  --build|build)
+    ;;
   run)
     open_app
-    ;;
-  --build|build)
-    echo "Built $APP_BUNDLE"
     ;;
   --debug|debug)
     lldb -- "$APP_BINARY"

@@ -1,24 +1,22 @@
 import Foundation
 
-final class CodexBackend: AgentBackend {
-    let kind: BackendKind = .codex
-    let capabilities = BackendCapabilities(
-        usesWorkspace: true,
-        supportsApprovals: true,
-        canOpenCompanionApp: true,
-        supervisorSummary: "Codex coordinator - native subagents, goals, memory",
-        nativeFeatures: ["subagents", "parallel agents", "goals", "compaction", "memories", "thread forks"]
-    )
+enum CodexSubmissionEvent {
+    case status(String)
+    case threadCreated(threadId: String, path: String?)
+    case agentDelta(String)
+    case completed(threadId: String, finalMessage: String)
+    case failed(String)
+}
 
-    private let queue = DispatchQueue(label: "CodexBackend")
+final class CodexAppServerClient {
+    private let queue = DispatchQueue(label: "CodexAppServerClient")
     private var activeProcess: Process?
-    private var cancelAction: (() -> Void)?
 
     func submit(
-        request: AgentRequest,
+        prompt: String,
         workspacePath: String,
-        existingSessionId: String?,
-        onEvent: @escaping (AgentEvent) -> Void
+        existingThreadId: String? = nil,
+        onEvent: @escaping (CodexSubmissionEvent) -> Void
     ) {
         queue.async { [weak self] in
             guard let self else { return }
@@ -28,46 +26,15 @@ final class CodexBackend: AgentBackend {
                 return
             }
 
-            self.run(request: request, workspacePath: workspacePath, existingThreadId: existingSessionId, onEvent: onEvent)
-        }
-    }
-
-    func cancel() {
-        queue.async { [weak self] in
-            self?.cancelAction?()
-        }
-    }
-
-    func reset() {}
-
-    /// A short progress line for a Codex work item (command, file change,
-    /// subagent), or nil for items that aren't worth surfacing.
-    static func activitySummary(for item: [String: Any]) -> String? {
-        switch item["type"] as? String {
-        case "commandExecution":
-            if let command = item["command"] as? String {
-                return "Run: \(command.prefix(80))"
-            }
-            return "Running a command"
-        case "fileChange":
-            return "Editing files in the workspace"
-        case "subagent", "agent":
-            return "Delegating to a subagent"
-        case "mcpToolCall", "toolCall":
-            if let tool = item["tool"] as? String ?? item["name"] as? String {
-                return "Using \(tool)"
-            }
-            return nil
-        default:
-            return nil
+            self.run(prompt: prompt, workspacePath: workspacePath, existingThreadId: existingThreadId, onEvent: onEvent)
         }
     }
 
     private func run(
-        request: AgentRequest,
+        prompt: String,
         workspacePath: String,
         existingThreadId: String?,
-        onEvent: @escaping (AgentEvent) -> Void
+        onEvent: @escaping (CodexSubmissionEvent) -> Void
     ) {
         let process = Process()
         let stdinPipe = Pipe()
@@ -83,14 +50,14 @@ final class CodexBackend: AgentBackend {
 
         activeProcess = process
 
-        var lineBuffer = LineBuffer()
+        var stdoutBuffer = Data()
         var stderrBuffer = Data()
         var threadId = existingThreadId
+        var threadPath: String?
         var finalMessage = ""
         var completed = false
         var lastTurnError: String?
         var sawTurnStarted = false
-        var sessionRecovery = CodexSessionRecovery(requestedSessionID: existingThreadId)
 
         func send(_ message: [String: Any]) {
             do {
@@ -117,69 +84,20 @@ final class CodexBackend: AgentBackend {
         }
 
         func sendTurnStart(id: Int, threadId: String) {
-            var input: [[String: Any]] = [
-                [
-                    "type": "text",
-                    "text": request.prompt,
-                    "text_elements": []
-                ]
-            ]
-            for attachment in request.attachments {
-                switch attachment.kind {
-                case .image:
-                    input.append([
-                        "type": "localImage",
-                        "path": attachment.url.path
-                    ])
-                case .file, .directory:
-                    input.append([
-                        "type": "mention",
-                        "name": attachment.displayName,
-                        "path": attachment.url.path
-                    ])
-                }
-            }
-
-            var params: [String: Any] = [
-                "threadId": threadId,
-                "cwd": workspacePath,
-                "approvalPolicy": AppConfig.approvalPolicy,
-                "input": input
-            ]
-            let context = LumiContextStore(workspacePath: workspacePath).text()
-            if !context.isEmpty {
-                params["additionalContext"] = [
-                    "lumi-context": [
-                        "kind": "application",
-                        "value": """
-                        Lumi's durable context is stored at \(LumiContextStore(workspacePath: workspacePath).contextURL.path). Use it as concise background. After a durable preference, decision, project state, or unresolved commitment changes, refine that file conservatively. Do not turn it into a transcript or log.
-
-                        <lumi_context>
-                        \(context)
-                        </lumi_context>
-                        """
-                    ]
-                ]
-            }
-
             send([
                 "method": "turn/start",
                 "id": id,
-                "params": params
-            ])
-        }
-
-        func sendThreadStart() {
-            send([
-                "method": "thread/start",
-                "id": 2,
                 "params": [
+                    "threadId": threadId,
                     "cwd": workspacePath,
-                    "sandbox": AppConfig.sandboxMode,
                     "approvalPolicy": AppConfig.approvalPolicy,
-                    "developerInstructions": AppConfig.supervisorInstructions(for: .codex),
-                    "personality": "friendly",
-                    "threadSource": "user"
+                    "input": [
+                        [
+                            "type": "text",
+                            "text": prompt,
+                            "text_elements": []
+                        ]
+                    ]
                 ]
             ])
         }
@@ -199,41 +117,17 @@ final class CodexBackend: AgentBackend {
             return text.isEmpty ? nil : text
         }
 
-        func requestApproval(
-            description: String,
-            onApprove: @escaping () -> Void,
-            onDeny: @escaping () -> Void
-        ) {
-            if AppConfig.codexAutoApprove {
-                onEvent(.status("Auto-approving: \(description)"))
-                onApprove()
-                return
-            }
-
-            onEvent(.approvalRequest(description: description) { [queue] approved in
-                queue.async {
-                    approved ? onApprove() : onDeny()
-                }
-            })
-        }
-
-        func handleServerRequest(method: String, id: Any, params: [String: Any]) -> Bool {
+        func approveServerRequest(method: String, id: Any, params: [String: Any]) -> Bool {
             switch method {
             case "item/commandExecution/requestApproval":
-                let command = params["command"] as? String ?? "a shell command"
-                requestApproval(
-                    description: "Run command: \(command)",
-                    onApprove: { sendResponse(id: id, result: ["decision": "acceptForSession"]) },
-                    onDeny: { sendResponse(id: id, result: ["decision": "decline"]) }
-                )
+                let command = params["command"] as? String
+                onEvent(.status("Approving command: \(command ?? "shell command")"))
+                sendResponse(id: id, result: ["decision": "acceptForSession"])
                 return true
 
             case "item/fileChange/requestApproval":
-                requestApproval(
-                    description: "Apply file changes in the workspace",
-                    onApprove: { sendResponse(id: id, result: ["decision": "acceptForSession"]) },
-                    onDeny: { sendResponse(id: id, result: ["decision": "decline"]) }
-                )
+                onEvent(.status("Approving workspace file changes..."))
+                sendResponse(id: id, result: ["decision": "acceptForSession"])
                 return true
 
             case "item/permissions/requestApproval":
@@ -245,46 +139,25 @@ final class CodexBackend: AgentBackend {
                 if let fileSystem = requested["fileSystem"], !isNull(fileSystem) {
                     granted["fileSystem"] = fileSystem
                 }
-                let names = granted.keys.sorted().joined(separator: ", ")
-                requestApproval(
-                    description: "Grant turn permissions: \(names.isEmpty ? "none" : names)",
-                    onApprove: {
-                        sendResponse(
-                            id: id,
-                            result: [
-                                "permissions": granted,
-                                "scope": "turn",
-                                "strictAutoReview": false
-                            ]
-                        )
-                    },
-                    onDeny: {
-                        sendResponse(
-                            id: id,
-                            result: [
-                                "permissions": [:],
-                                "scope": "turn",
-                                "strictAutoReview": false
-                            ]
-                        )
-                    }
+                onEvent(.status("Granting requested turn permissions..."))
+                sendResponse(
+                    id: id,
+                    result: [
+                        "permissions": granted,
+                        "scope": "turn",
+                        "strictAutoReview": false
+                    ]
                 )
                 return true
 
             case "execCommandApproval":
-                requestApproval(
-                    description: "Run a command (legacy request)",
-                    onApprove: { sendResponse(id: id, result: ["decision": "approved_for_session"]) },
-                    onDeny: { sendResponse(id: id, result: ["decision": "denied"]) }
-                )
+                onEvent(.status("Approving legacy command request..."))
+                sendResponse(id: id, result: ["decision": "approved_for_session"])
                 return true
 
             case "applyPatchApproval":
-                requestApproval(
-                    description: "Apply a patch (legacy request)",
-                    onApprove: { sendResponse(id: id, result: ["decision": "approved_for_session"]) },
-                    onDeny: { sendResponse(id: id, result: ["decision": "denied"]) }
-                )
+                onEvent(.status("Approving legacy patch request..."))
+                sendResponse(id: id, result: ["decision": "approved_for_session"])
                 return true
 
             case "item/tool/requestUserInput":
@@ -315,7 +188,7 @@ final class CodexBackend: AgentBackend {
                 return true
 
             case "account/chatgptAuthTokens/refresh", "attestation/generate":
-                sendError(id: id, message: "\(method) is not supported by Lumi.")
+                sendError(id: id, message: "\(method) is not supported by Codex Sprite.")
                 return true
 
             default:
@@ -324,7 +197,7 @@ final class CodexBackend: AgentBackend {
             }
         }
 
-        func finish(_ event: AgentEvent) {
+        func finish(_ event: CodexSubmissionEvent) {
             guard !completed else { return }
             completed = true
             onEvent(event)
@@ -333,10 +206,10 @@ final class CodexBackend: AgentBackend {
             stdinPipe.fileHandleForWriting.closeFile()
             process.terminate()
             activeProcess = nil
-            cancelAction = nil
         }
 
         func finishSuccessfulTurn() {
+            let id = threadId ?? "unknown"
             let trimmedFinal = finalMessage.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmedFinal.isEmpty, let lastTurnError {
                 finish(.failed(lastTurnError))
@@ -346,11 +219,7 @@ final class CodexBackend: AgentBackend {
             let message = trimmedFinal.isEmpty
                 ? "Codex completed the turn. Open Codex to review details."
                 : finalMessage
-            finish(.completed(sessionId: threadId, finalMessage: message))
-        }
-
-        cancelAction = {
-            finish(.failed("Stopped."))
+            finish(.completed(threadId: id, finalMessage: message))
         }
 
         stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
@@ -358,19 +227,19 @@ final class CodexBackend: AgentBackend {
             guard !chunk.isEmpty else { return }
 
             self.queue.async {
-                for lineData in lineBuffer.append(chunk) {
+                stdoutBuffer.append(chunk)
+
+                while let newlineIndex = stdoutBuffer.firstIndex(of: 0x0A) {
+                    let lineData = stdoutBuffer.subdata(in: stdoutBuffer.startIndex..<newlineIndex)
+                    stdoutBuffer.removeSubrange(stdoutBuffer.startIndex...newlineIndex)
+
+                    guard !lineData.isEmpty else { continue }
                     guard let message = try? JSONSerialization.jsonObject(with: lineData, options: []) as? [String: Any] else {
                         continue
                     }
 
                     if let error = message["error"] as? [String: Any] {
                         let text = error["message"] as? String ?? "Codex app-server returned an error."
-                        if sessionRecovery.shouldRetryWithFreshThread(responseID: message["id"] as? Int) {
-                            threadId = nil
-                            onEvent(.status("Stored Codex thread is unavailable. Starting fresh..."))
-                            sendThreadStart()
-                            continue
-                        }
                         finish(.failed(text))
                         return
                     }
@@ -389,18 +258,28 @@ final class CodexBackend: AgentBackend {
                                 ]
                             ])
                         } else {
-                            sendThreadStart()
+                            send([
+                                "method": "thread/start",
+                                "id": 2,
+                                "params": [
+                                    "cwd": workspacePath,
+                                    "sandbox": AppConfig.sandboxMode,
+                                    "approvalPolicy": AppConfig.approvalPolicy,
+                                    "threadSource": "user"
+                                ]
+                            ])
                         }
                         continue
                     }
 
                     if (message["id"] as? Int) == 2,
                        let result = message["result"] as? [String: Any],
-                        let thread = result["thread"] as? [String: Any],
-                        let readyThreadId = thread["id"] as? String {
+                       let thread = result["thread"] as? [String: Any],
+                       let readyThreadId = thread["id"] as? String {
                         threadId = readyThreadId
-                        if sessionRecovery.readyThreadIsNew {
-                            onEvent(.sessionStarted(id: readyThreadId))
+                        threadPath = thread["path"] as? String
+                        if existingThreadId == nil {
+                            onEvent(.threadCreated(threadId: readyThreadId, path: threadPath))
                         } else {
                             onEvent(.status("Active thread resumed."))
                         }
@@ -411,7 +290,7 @@ final class CodexBackend: AgentBackend {
                     if let method = message["method"] as? String {
                         if let requestId = message["id"],
                            let params = message["params"] as? [String: Any],
-                           handleServerRequest(method: method, id: requestId, params: params) {
+                           approveServerRequest(method: method, id: requestId, params: params) {
                             continue
                         }
 
@@ -420,7 +299,7 @@ final class CodexBackend: AgentBackend {
                             if let params = message["params"] as? [String: Any],
                                let delta = params["delta"] as? String {
                                 finalMessage += delta
-                                onEvent(.delta(delta))
+                                onEvent(.agentDelta(delta))
                             }
 
                         case "item/completed":
@@ -432,19 +311,12 @@ final class CodexBackend: AgentBackend {
                                let text = item["text"] as? String {
                                 finalMessage = text
                                 if !text.isEmpty {
-                                    onEvent(.delta(text))
+                                    onEvent(.agentDelta(text))
                                 }
                             }
 
                         case "turn/started":
                             sawTurnStarted = true
-
-                        case "item/started", "item/updated":
-                            if let params = message["params"] as? [String: Any],
-                               let item = params["item"] as? [String: Any],
-                               let summary = Self.activitySummary(for: item) {
-                                onEvent(.activity(summary))
-                            }
 
                         case "error":
                             if let params = message["params"] as? [String: Any],
@@ -459,10 +331,10 @@ final class CodexBackend: AgentBackend {
                         case "thread/status/changed":
                             if let params = message["params"] as? [String: Any],
                                let status = params["status"] {
-                                onEvent(.status("Codex status: \(status)"))
-                                if sawTurnStarted,
-                                   let statusInfo = status as? [String: Any],
-                                   statusInfo["type"] as? String == "idle" {
+                                if let text = CodexStatusFormatter.displayText(from: status) {
+                                    onEvent(.status(text))
+                                }
+                                if sawTurnStarted, CodexStatusFormatter.isIdle(status) {
                                     finishSuccessfulTurn()
                                     return
                                 }
@@ -522,9 +394,9 @@ final class CodexBackend: AgentBackend {
             "id": 1,
             "params": [
                 "clientInfo": [
-                    "name": "lumi",
-                    "title": "Lumi",
-                    "version": "0.6.0"
+                    "name": "codex_sprite",
+                    "title": "Codex Sprite",
+                    "version": AppConfig.appVersion
                 ],
                 "capabilities": [
                     "experimentalApi": true,

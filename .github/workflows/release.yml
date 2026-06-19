@@ -20,16 +20,16 @@ jobs:
         run: ./script/build_and_run.sh --build
 
       - name: Package
-        run: ditto -c -k --sequesterRsrc --keepParent dist/Lumi.app "dist/Lumi-${GITHUB_REF_NAME}.zip"
+        run: ditto -c -k --sequesterRsrc --keepParent dist/CodexSprite.app "dist/CodexSprite-${GITHUB_REF_NAME}.zip"
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/Lumi-*.zip
+          files: dist/CodexSprite-*.zip
           generate_release_notes: true
           body: |
-            Unsigned development build. After unzipping, remove the quarantine attribute before first launch:
+            Ad-hoc signed development build. This is not notarized. After unzipping, remove the quarantine attribute before first launch:
 
             ```bash
-            xattr -dr com.apple.quarantine Lumi.app
+            xattr -dr com.apple.quarantine CodexSprite.app
             ```

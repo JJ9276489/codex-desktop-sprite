@@ -1,79 +1,27 @@
 # Changelog
 
-## 0.6.0 — 2026-06-11
-
-### Added
-- **Persistent Claude Code session.** The CLI now runs as a single long-lived bidirectional `stream-json` process per master session; follow-up prompts continue the same in-process conversation instead of paying a fresh `claude -p` cold start each turn.
-- **Interactive Claude Code approvals.** Running as `--permission-prompt-tool stdio`, tool-use permission checks route into Lumi's Allow/Deny dialog, reaching parity with the Codex backend.
-- **Live activity line.** Tool calls, file edits, and subagent work surface as a progress line on both backends (`AgentEvent.activity`).
-
-## 0.5.1 — 2026-06-11
-
-### Fixed
-- Removed the duplicate-submit guard that silently swallowed legitimate repeated requests after a turn completed.
-- Status events surface their actual text again (session recovery notices, auto-approve announcements, mid-turn errors) instead of a generic "Working...".
-- Claude Code recovers from stale persisted sessions by retrying once on a fresh session; cancellation reports "Stopped." instead of a process-exit error.
-- Transcript rendering caches per-message Markdown (only the streaming message re-parses) and no longer force-scrolls while reading earlier messages.
-- Replaced a force-unwrap in the attachment picker; added File > Close Window (Cmd-W).
-
-### Added
-- Tag-triggered release workflow publishing a zipped `Lumi.app` to GitHub Releases.
-- Live verification (`codex app-server`) that `developerInstructions`, `personality`, and `additionalContext` are accepted by the current protocol.
-
-## 0.5.0 - 2026-06-11
-
-### Added
-- Durable Lumi master sessions, stored separately for each provider and workspace and restored across launches.
-- Provider-specific coordinator instructions using Codex and Claude Code's native subagents, goals, compaction, memory, and workflow facilities.
-- Structured Markdown conversation rendering with separate user, Lumi, and status messages.
-- Auto-growing native composer with standard Edit commands, Control-A Select All, attachment chips, file picker, pasted images, and drag/drop.
-- File and folder drops directly onto the Lumi sprite, with a receiving highlight and short success animation.
+## 0.7.0 — 2026-06-19
 
 ### Changed
-- Codex supervisor instructions now use app-server `developerInstructions` instead of modifying the first user message.
-- Claude Code receives workspace `AGENTS.md` guidance so both providers share the same durable workspace context.
-- The prompt panel is wider and less compressed, with corrected caret and placeholder alignment.
-
-## 0.4.1 — 2026-06-10
-
-### Added
-- Shared assistant persona (`LUMI_PERSONA`): the assistant identifies as Lumi regardless of the active engine. Delivered via `--append-system-prompt` for Claude Code and a first-turn preamble for Codex.
-- Lingering click greeting: hearts float up after release, the greeting sequence plays out fully before cursor-gaze tracking takes over.
-
-### Fixed
-- Character size and baseline now normalized across sprite sheets at draw time; sitting, sleeping, and expression frames previously rendered up to 16% larger and on a different ground line than standing frames.
-- Clicking the sprite while it sat no longer plays the wake-from-sleep eye-rub sequence; it greets from the seat, stands, and waves.
-- Transcript labels the assistant's turns "Lumi" instead of the backend name.
-
-## 0.4.0 — 2026-06-10
-
-### Changed
-- **Agents only.** Removed the Claude API and OpenAI-compatible chat backends — Lumi connects exclusively to coding agents (Codex, Claude Code) that can act in your workspace. `ANTHROPIC_API_KEY` / `LUMI_OPENAI_*` / `LUMI_SYSTEM_PROMPT` settings are gone.
-- Prompt window collapses into a compact ask bar when idle; the transcript floats on the window blur and appears only during a conversation.
-
-### Added
-- Seven hand-drawn expression sprites (pleading, talking x3, dizzy, celebrate, listening) wired into approvals, streaming, failure, success, and listening states, plus the `tools/process_expressions.swift` pipeline that produced them.
+- Restored the project to the supported Codex Desktop Sprite path: a thin AppKit UI over Codex `app-server`.
+- Replaced the visible character with Lumi's standing and sitting orientation sheets.
+- Simplified sprite behavior to cursor-gaze standing/sitting, click greeting bubbles, drag feedback, and small working thought bubbles.
+- Suppressed raw structured Codex status dictionaries such as `activeFlags` in the prompt UI.
+- Renamed the app bundle back to `CodexSprite.app` and restored `CODEX_SPRITE_*` configuration.
 
 ### Removed
-- Procedural pixel-person fallback renderer (a leftover placeholder character).
-
-## 0.3.0 — 2026-06-10
-
-**The Lumi release.** Codex Desktop Sprite is now Lumi, a backend-agnostic desktop AI companion.
+- Removed the standalone Lumi agent runtime: durable Lumi log, memory/dream consolidation, Claude Code backend, local voice, diary window, attachment system, provider orchestration, and expression/action/sleep sprite sheets.
+- Removed unused generated sprite scratch assets from the maintained checkout.
 
 ### Added
-- Pluggable `AgentBackend` protocol with four backends: Codex, Claude Code (headless CLI), Claude API, and any OpenAI-compatible endpoint (Ollama, LM Studio, OpenRouter, ...).
-- Backend picker in the prompt window, persisted across launches.
-- Interactive **Allow / Deny approval dialogs** for agent actions (replaces silent auto-approve; `LUMI_CODEX_AUTO_APPROVE=1` opts back in).
-- Stop button to cancel an in-flight request.
-- Unit test suite (`script/test.sh`) covering line buffering and all three streaming wire formats, plus GitHub Actions CI.
-- `docs/ARCHITECTURE.md`, `CONTRIBUTING.md`, this changelog.
-
-### Changed
-- Renamed: app is `Lumi.app`, repo is `lumi`, env vars use the `LUMI_*` prefix (old `CODEX_SPRITE_*` / `SPRITE_*` names removed).
-- Prompt window redesigned as a clean HUD panel: hidden titlebar, rounded panels, placeholder text, icon controls.
-- Stream parsing extracted into pure, tested units (`LineBuffer`, `StreamParsers`).
+- Added focused tests for version/config, Codex status formatting, and the retained stand/sit asset manifests.
+- Added `--build` support for CI/release packaging without launching the GUI.
+- Added ad-hoc signing to local bundle staging so `codesign --verify` passes.
 
 ## 0.1.0 — 2026-06-06
 
-- Initial MVP: floating Codex sprite with intent-driven animations, prompt window, and `codex app-server` integration.
+- Initial MVP: floating Codex sprite with prompt window and Codex `app-server` integration.
+
+## Superseded Lumi-era Releases
+
+Versions `0.3.0` through `0.6.0` grew the project into the standalone Lumi app. That direction is intentionally retired in `0.7.0`; details remain available in git history.

@@ -3,18 +3,18 @@
 import PackageDescription
 
 let package = Package(
-    name: "Lumi",
+    name: "CodexDesktopSprite",
     platforms: [
         .macOS(.v14)
     ],
     products: [
-        .executable(name: "Lumi", targets: ["Lumi"])
+        .executable(name: "CodexSprite", targets: ["CodexSprite"])
     ],
     dependencies: [],
     targets: [
         .executableTarget(
-            name: "Lumi",
-            path: "Sources/Lumi"
+            name: "CodexSprite",
+            path: "Sources/CodexSprite"
         )
     ]
 )
